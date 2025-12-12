@@ -36,8 +36,10 @@ Configurations can be made in "config.py"
 ## Links
 Rebocap Link:  
 - https://doc.rebocap.com/en_US/SDK/  
+
 Unitree Link:  
 - https://support.unitree.com/home/en/G1_developer  
+
 Other githubs:  
 - https://github.com/unitreerobotics/unitree_mujoco/tree/main  
 - https://github.com/robocasa/robocasa/tree/main  
