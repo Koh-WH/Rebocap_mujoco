@@ -28,14 +28,18 @@ rebocap_g1_realtime/
 python realtime_mujoco_viewer.py --model_path scene.xml --calibrate
 ```  
 ### To make configuration easier, the above script is split into "main.py" and "config.py" 
-Configurations can be made in "config.py"  
-- ```
+- Configurations can be made in "config.py"  
+- "main.py" includes locked hips and ground clamping for the feet, not included originally.
+```
 python main.py --model_path scene.xml --calibrate
 ```  
-"main.py" includes locked hips and ground clamping for the feet, not included originally. 
-- ```python main_2.py --model_path scene.xml --calibrate```
-"main_2.py includes unlocked hips.  
-```python main_2.py --help```
+- "main_2.py includes unlocked hips.
+```
+python main_2.py --model_path scene.xml --calibrate
+```
+```
+python main_2.py --help
+```
 ### Run with Ngrok:
 - Copy the token from 'https://dashboard.ngrok.com/get-started/setup/windows'  
 - Paste in "webserver.py"  
