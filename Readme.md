@@ -4,7 +4,7 @@ This repo only uses 12 rebocap sensors:
 [ 'Chest', 'Waist', 'Right upper arm', 'Right lower arm', 'Right hand', 'Left Upper arm', 'Left lower arm', 'Left hand', 'Right thigh', 'Right calf', 'Left thigh', 'left calf' ]
 
 ## Folder Structure:
-`
+```
 rebocap_g1_realtime/
 ├── config.py  
 ├── main.py    
@@ -18,7 +18,7 @@ rebocap_g1_realtime/
 ├── g1_29dof.xml                 
 ├── meshes/                      
 └── rebocap_ws_sdk/              
-`
+```
 
 ## Steps
 ### Run via direct SDK connection:
