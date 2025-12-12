@@ -1,8 +1,9 @@
 # Rebocap to Mujoco
 
-This repo only uses 12 rebocap sensors:
+This repo only uses 12 rebocap sensors:  
+```
 [ 'Chest', 'Waist', 'Right upper arm', 'Right lower arm', 'Right hand', 'Left Upper arm', 'Left lower arm', 'Left hand', 'Right thigh', 'Right calf', 'Left thigh', 'left calf' ]
-
+```
 ## Folder Structure:
 ```
 rebocap_g1_realtime/
