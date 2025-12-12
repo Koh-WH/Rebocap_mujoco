@@ -8,7 +8,8 @@ This repo only uses 12 rebocap sensors:
 ```
 rebocap_g1_realtime/
 ├── config.py  
-├── main.py    
+├── main.py   
+├── main_2.py   
 │            
 ├── realtime_mujoco_viewer.py    
 │
@@ -24,15 +25,20 @@ rebocap_g1_realtime/
 ## Steps
 ### Run via direct SDK connection:
 `python realtime_mujoco_viewer.py --model_path scene.xml --calibrate`  
-### To make configuration easier, the above script is split into "main.py" and "config.py"  
-`python main.py --model_path scene.xml --calibrate`  
+### To make configuration easier, the above script is split into "main.py" and "config.py" 
 Configurations can be made in "config.py"  
+- `python main.py --model_path scene.xml --calibrate`  
+"main.py" includes locked hips and ground clamping for the feet, not included originally. 
+- `python main_2.py --model_path scene.xml --calibrate`
+"main_2.py includes unlocked hips.
+`python main_2.py --help`
 ### Run with Ngrok:
 - Copy the token from 'https://dashboard.ngrok.com/get-started/setup/windows'  
 - Paste in "webserver.py"  
 - Run `pip install pyngrok` in terminal  
 - Run `python webserver.py` and copy the url  
-- Open another terminal and run `python webreceiver.py` and paste the url  
+- Open another terminal and run `python webreceiver.py --calibrate` and paste the url.
+- Or run `python webreceiver.py --calibrate --url <paste url>`
 
 ## Links
 Rebocap Link:  

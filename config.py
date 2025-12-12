@@ -4,6 +4,18 @@ Configuration for ReboCap MuJoCo G1 Integration
 """
 
 # ============================================
+# MODEL AND CONNECTION SETTINGS
+# ============================================
+MODEL_PATH = "g1_29dof.xml"
+REBOCAP_PORT = 7690
+ROOT_HEIGHT_OFFSET = 1.0  # Height offset in meters 
+
+# ============================================
+# CALIBRATION SETTINGS
+# ============================================
+CALIBRATION_WAIT_TIME = 10  # Seconds to wait before capturing. Only works for main_2.py
+
+# ============================================
 # COORDINATE SYSTEM CONFIGURATION
 # ============================================
 COORDINATE_REMAP = {

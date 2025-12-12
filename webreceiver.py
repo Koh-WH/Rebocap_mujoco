@@ -209,7 +209,7 @@ def main():
         conv.calibrate(buf)
         print("✅ Calibrated!")
 
-    print("\n🎬 STARTING VIEWER (Press 'S' for axes)")
+    print("\n🎬 STARTING VIEWER (Press 'S' for shadows)")
     with mujoco.viewer.launch_passive(model, data) as viewer:
         viewer.cam.azimuth = 90
         viewer.cam.elevation = -15
