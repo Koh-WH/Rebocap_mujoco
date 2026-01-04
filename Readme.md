@@ -19,9 +19,10 @@ rebocap_g1_realtime/
 │
 ├── scene.xml
 ├── g1_29dof.xml                 
-├── meshes/                      
+├── xml/                      
 ├── rebocap_ws_sdk/
 ├── policies/  
+├── recordings/
 │
 ├── test_play.py
 └── test_record.py

@@ -191,7 +191,7 @@ class MotionConverter:
 # ============================================
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_path", default="scene.xml")
+    parser.add_argument("--model_path", default="xml/scene.xml")
     parser.add_argument("--port", type=int, default=7690)
     parser.add_argument("--calibrate", action="store_true")
     args = parser.parse_args()

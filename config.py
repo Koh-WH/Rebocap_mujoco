@@ -6,7 +6,7 @@ Configuration for ReboCap MuJoCo G1 Integration
 # ============================================
 # MODEL AND CONNECTION SETTINGS
 # ============================================
-MODEL_PATH = "g1_29dof.xml"
+MODEL_PATH = "xml/scene.xml"
 REBOCAP_PORT = 7690
 ROOT_HEIGHT_OFFSET = 1.0  # Height offset in meters 
 

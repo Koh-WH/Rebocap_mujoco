@@ -201,7 +201,7 @@ if __name__ == "__main__":
         default="policies\policy_lstm_1.pt",
         help="Path to policy file"
     )
-    parser.add_argument("--xml", type=str, default="scene.xml", help="Path to scene.xml")
+    parser.add_argument("--xml", type=str, default="xml/scene.xml", help="Path to scene.xml")
     args = parser.parse_args()
     print(args.url)
     print(args.policy)

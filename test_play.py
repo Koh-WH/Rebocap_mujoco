@@ -13,14 +13,14 @@ def main():
     parser.add_argument(
         "--model_path", 
         type=str, 
-        default="scene.xml", 
+        default="xml/scene.xml", 
         help="Path to the MuJoCo XML model file (default: scene.xml)"
     )
     
     parser.add_argument(
         "--dataset", 
         type=str, 
-        default="recorded_demo1.hdf5", 
+        default="recordings/recorded_demo1.hdf5", 
         help="Path to the HDF5 dataset file"
     )
     

@@ -168,7 +168,7 @@ class MotionConverter:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", type=str, help="Ngrok URL")
-    parser.add_argument("--model_path", default="scene.xml")
+    parser.add_argument("--model_path", default="xml/scene.xml")
     parser.add_argument("--calibrate", action="store_true")
     args = parser.parse_args()
 

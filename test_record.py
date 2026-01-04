@@ -227,7 +227,7 @@ def save_recording(filename, buffer):
 # ============================================
 def main():
     parser = argparse.ArgumentParser(description="ReboCap G1 Recorder")
-    parser.add_argument("--output", type=str, default="mocap_recording.hdf5", help="Output HDF5 filename")
+    parser.add_argument("--output", type=str, default="recordings/mocap_recording.hdf5", help="Output HDF5 filename")
     parser.add_argument("--model_path", type=str, default=MODEL_PATH)
     parser.add_argument("--port", type=int, default=REBOCAP_PORT)
     parser.add_argument("--calibrate", action="store_true")
