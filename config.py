@@ -67,10 +67,10 @@ REBOCAP_TO_G1_MAPPING = {
     # Left Arm (Sensors: Left Upper Arm + Lower Arm + Hand)
     16: [  # L_Shoulder
         ('left_shoulder_pitch_joint', 2, -1.0, 0.0),
-        ('left_shoulder_roll_joint', 0, -1.2, 1.7),
+        ('left_shoulder_roll_joint', 0, -1.2, 1.2),
         ('left_shoulder_yaw_joint', 1, -1.2, 0.0)
     ],
-    18: [('left_elbow_joint', 0, 0.7, 1.0)],  # L_Elbow
+    18: [('left_elbow_joint', 0, 0.7, 1.2)],  # L_Elbow
     20: [  # L_Wrist
         ('left_wrist_pitch_joint', 2, -0.9, 0.0),
         ('left_wrist_roll_joint', 1, 0.9, 0.0),
@@ -80,10 +80,10 @@ REBOCAP_TO_G1_MAPPING = {
     # Right Arm (Sensors: Right Upper Arm + Lower Arm + Hand)
     17: [  # R_Shoulder
         ('right_shoulder_pitch_joint', 2, 1.0, 0.0),
-        ('right_shoulder_roll_joint', 0, -1.2, -1.7),
+        ('right_shoulder_roll_joint', 0, -1.2, -1.2),
         ('right_shoulder_yaw_joint', 1, 1.2, 0.0)
     ],
-    19: [('right_elbow_joint', 0, -0.7, 1.0)],  # R_Elbow
+    19: [('right_elbow_joint', 0, -0.7, 1.2)],  # R_Elbow
     21: [  # R_Wrist
         ('right_wrist_pitch_joint', 2, 0.9, 0.0),
         ('right_wrist_roll_joint', 1, -0.9, 0.0),

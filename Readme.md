@@ -15,11 +15,16 @@ rebocap_g1_realtime/
 │
 ├── webreceiver.py
 ├── webserver.py
+├── RL_legs_webreceiver.py
 │
 ├── scene.xml
 ├── g1_29dof.xml                 
 ├── meshes/                      
-└── rebocap_ws_sdk/              
+├── rebocap_ws_sdk/
+├── policies/  
+│
+├── test_play.py
+└── test_record.py
 ```
 
 ## Steps
@@ -47,17 +52,27 @@ python main_2.py --help
 - Run ```python webserver.py``` and copy the url  
 - Open another terminal and run ```python webreceiver.py --calibrate``` and paste the url.
 - Or run ```python webreceiver.py --calibrate --url <paste url>```
+  
+- With RL policy for legs in physics environment  
+```
+python RL_legs_webreceiver.py
+```
 
+### Recording and play:
+- test_play.py
+- test_record.py
+  
 ## Links
 Rebocap Link:  
 - https://doc.rebocap.com/en_US/SDK/  
-
+  
 Unitree Link:  
 - https://support.unitree.com/home/en/G1_developer  
-
+  
 Other githubs:  
 - https://github.com/unitreerobotics/unitree_mujoco/tree/main  
 - https://github.com/robocasa/robocasa/tree/main  
 - https://github.com/google-deepmind/mujoco_playground/tree/main  
 - https://github.com/anderspitman/awesome-tunneling  
 - https://github.com/YanjieZe/awesome-humanoid-robot-learning  
+  
