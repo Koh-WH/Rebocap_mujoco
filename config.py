@@ -50,16 +50,16 @@ REBOCAP_TO_G1_MAPPING = {
     
     # Left Leg (Sensors: Left Thigh + Calf)
     1: [  # L_Hip
-        ('left_hip_pitch_joint', 1, 0.5, 0.0),
-        ('left_hip_roll_joint', 0, 0.5, 0.0),
+        ('left_hip_pitch_joint', 0, -0.5, -0.15),
+        ('left_hip_roll_joint', 1, -0.5, 0.0),
         ('left_hip_yaw_joint', 2, 0.5, 0.0)
     ],
     4: [('left_knee_joint', 1, 0.9, 0.0)],  # L_Knee
     
     # Right Leg (Sensors: Right Thigh + Calf)
     2: [  # R_Hip
-        ('right_hip_pitch_joint', 1, 0.5, 0.0),
-        ('right_hip_roll_joint', 0, -0.5, 0.0),
+        ('right_hip_pitch_joint', 0, 0.5, -0.15),
+        ('right_hip_roll_joint', 1, 0.5, 0.0),
         ('right_hip_yaw_joint', 2, -0.5, 0.0)
     ],
     5: [('right_knee_joint', 1, 0.9, 0.0)],  # R_Knee

@@ -16,9 +16,7 @@ rebocap_g1_realtime/
 ├── webreceiver.py
 ├── webserver.py
 ├── RL_legs_webreceiver.py
-│
-├── scene.xml
-├── g1_29dof.xml                 
+│                
 ├── xml/                      
 ├── rebocap_ws_sdk/
 ├── policies/  
