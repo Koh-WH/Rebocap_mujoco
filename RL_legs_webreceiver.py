@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-TELEOP DANCE: PURE RL LEGS
-- LEGS: 100% Controlled by AI Balance Policy (No Teleop)
-- ARMS/TORSO: Controlled by VR/Mocap
-- INCLUDES: CoM Stabilizer to handle the weight shifts from arm movements
+TELEOP DANCE: UNIVERSAL RL LEGS CONTROLLER
+- Supports ANY Policy Size (12-DoF, 29-DoF, etc.)
+- LEGS (0-11): Controlled by RL Policy
+- UPPER BODY (12+): Controlled by VR/Mocap
+- AUTO-DETECTS policy input size on startup
 """
 
 import time
@@ -17,21 +18,22 @@ from scipy.spatial.transform import Rotation as R
 import sys
 
 # --- CONFIGURATION ---
-LEG_INDICES = list(range(12))        # RL Controls these
-UPPER_BODY_INDICES = list(range(12, 29)) # You Control these
+# The G1 robot has 29 joints total.
+# We explicitly define which indices correspond to what.
+LEG_INDICES = list(range(12))            # Joints 0-11 (Legs)
+UPPER_BODY_INDICES = list(range(12, 29)) # Joints 12-28 (Waist + Arms + Head)
 
-# 1. GAINS (Stiff legs for balance, Soft arms for safety)
+# 1. GAINS
 LEG_KP = 100.0    
 LEG_KD = 10.0     
 ARM_KP = 40.0
 ARM_KD = 1.0
 
-# 2. BALANCE ARBITRATION (Helps RL handle arm swings)
-# Pushes legs to correct Center of Mass shifts
+# 2. BALANCE ARBITRATION
 COM_KP = [150.0, 150.0, 0.0] 
 COM_KD = [10.0, 10.0, 0.0]
 
-# 3. TIMING (50Hz Policy / 500Hz Sim)
+# 3. TIMING
 DECIMATION = 10  
 
 class G1Controller:
@@ -44,23 +46,54 @@ class G1Controller:
         self.policy = torch.jit.load(policy_path)
         self.policy.eval()
         
+        # --- AUTO-DETECT POLICY DOF ---
+        self.policy_dof = self._detect_policy_dof()
+        print(f"🔍 Detected Policy Structure: {self.policy_dof}-DoF")
+        
         self.receiver = RemoteReceiver()
         self.converter = MotionConverter(self.model)
         
-        self.last_actions = torch.zeros(12)
+        # Action buffer matches the policy size
+        self.last_actions = torch.zeros(self.policy_dof)
         
-        # --- ROBUST DEFAULT POSE (Bent Knees) ---
+        # --- INITIALIZE FULL BODY DEFAULT POSE (29 JOINTS) ---
+        # We need a full 29-element vector even if the policy only uses 12.
+        self.default_dof_pos = torch.zeros(29)
+        
         if self.model.nkey > 0:
-            self.default_dof_pos = torch.from_numpy(self.model.key_qpos[0][7:7+12]).float()
+            # Load from XML keyframe if available
+            self.default_dof_pos = torch.from_numpy(self.model.key_qpos[0][7:7+29]).float()
         else:
+            # Fallback: Bent knees for legs, zeros for arms
             bent_knees = np.array([
-                -0.1, 0.0, 0.0, 0.3, -0.2, 0.0,
-                -0.1, 0.0, 0.0, 0.3, -0.2, 0.0
+                -0.1, 0.0, 0.0, 0.3, -0.2, 0.0, # L Leg
+                -0.1, 0.0, 0.0, 0.3, -0.2, 0.0  # R Leg
             ], dtype=np.float32)
-            self.default_dof_pos = torch.from_numpy(bent_knees)
+            self.default_dof_pos[0:12] = torch.from_numpy(bent_knees)
             
-        # Physics Cache
         self.jac_com = np.zeros((3, self.model.nv))
+
+    def _detect_policy_dof(self):
+        """
+        Tries to run the policy with different input sizes to determine N.
+        Standard IsaacGym Obs: 
+        BaseVel(3) + Gravity(3) + Cmd(3) + DofPos(N) + DofVel(N) + LastAct(N) + Clock(2)
+        Input Size = 11 + 3*N
+        """
+        possible_dofs = [12, 23, 29] # Common G1 configurations
+        
+        for dof in possible_dofs:
+            input_dim = 11 + (3 * dof)
+            try:
+                # Try a dummy forward pass
+                dummy_obs = torch.zeros(1, input_dim)
+                self.policy(dummy_obs)
+                return dof
+            except Exception:
+                continue
+        
+        print("⚠️  WARNING: Could not auto-detect DoF. Defaulting to 12.")
+        return 12
 
     def get_com_state(self):
         com_pos = self.data.subtree_com[0]
@@ -68,45 +101,53 @@ class G1Controller:
         return com_pos, com_vel
 
     def compute_balance_torque(self):
-        """Calculates 'Reflex' forces to keep the robot upright"""
         if not hasattr(self, 'com_ref'):
             self.com_ref = self.data.subtree_com[0].copy()
             self.com_ref[2] = 0.0 
 
         com_pos, com_vel = self.get_com_state()
-        
-        # Goal: Keep CoM over the feet (Anchor Point)
         target_pos = self.com_ref.copy()
         target_pos[2] = com_pos[2] 
         
         f_x = COM_KP[0] * (target_pos[0] - com_pos[0]) - COM_KD[0] * com_vel[0]
         f_y = COM_KP[1] * (target_pos[1] - com_pos[1]) - COM_KD[1] * com_vel[1]
-        f_z = 0.0
-        
-        virtual_force = np.array([f_x, f_y, f_z])
+        virtual_force = np.array([f_x, f_y, 0.0])
         
         mujoco.mj_jacSubtreeCom(self.model, self.data, self.jac_com, 0)
         balance_torques_full = self.jac_com.T @ virtual_force
-        
-        return balance_torques_full[6:18] # Apply ONLY to legs
+        return balance_torques_full[6:18] 
 
     def get_observations(self):
+        # 1. Base State
         base_quat = self.data.qpos[3:7]
         base_ang_vel = torch.tensor(self.data.qvel[3:6], dtype=torch.float32) * 0.25
         r = R.from_quat([base_quat[1], base_quat[2], base_quat[3], base_quat[0]])
-        
-        # INVERT GRAVITY (World frame relative to Body)
         proj_grav = torch.tensor(r.inv().apply([0, 0, -1]), dtype=torch.float32)
         
-        current_dof_pos = torch.tensor(self.data.qpos[7:7+29], dtype=torch.float32)
-        current_dof_vel = torch.tensor(self.data.qvel[6:6+29], dtype=torch.float32)
+        # 2. Joint State (Dynamically sliced based on Policy DoF)
+        # We assume the policy always wants the FIRST 'N' joints of the robot.
+        N = self.policy_dof
         
-        leg_pos = (current_dof_pos[LEG_INDICES] - self.default_dof_pos) * 1.0
-        leg_vel = current_dof_vel[LEG_INDICES] * 0.05
+        current_dof_pos = torch.tensor(self.data.qpos[7:7+N], dtype=torch.float32)
+        current_dof_vel = torch.tensor(self.data.qvel[6:6+N], dtype=torch.float32)
+        
+        # Normalize using the default pose (sliced to N)
+        target_dof_pos = (current_dof_pos - self.default_dof_pos[:N]) * 1.0
+        target_dof_vel = current_dof_vel * 0.05
+        
         commands = torch.zeros(3) 
         sin_cos = torch.tensor([0.0, 1.0]) 
         
-        obs = torch.cat([base_ang_vel, proj_grav, commands, leg_pos, leg_vel, self.last_actions, sin_cos])
+        # 3. Construct Obs
+        obs = torch.cat([
+            base_ang_vel, 
+            proj_grav, 
+            commands, 
+            target_dof_pos, 
+            target_dof_vel, 
+            self.last_actions, 
+            sin_cos
+        ])
         return obs.unsqueeze(0)
 
     def run(self, url):
@@ -114,62 +155,70 @@ class G1Controller:
         print("⏳ Waiting for Mocap Data...")
         while not self.receiver.get_latest(): time.sleep(0.1)
         
-        print(f"⚡ Starting PURE RL LEGS Loop")
+        print(f"⚡ Starting Controller (Hybrid: RL Legs + Mocap Arms)")
         
         with mujoco.viewer.launch_passive(self.model, self.data) as viewer:
-            # Init Pose
+            # Reset
             if self.model.nkey > 0:
                 self.data.qpos[:] = self.model.key_qpos[0]
             else:
                 self.data.qpos[:] = 0.0
                 self.data.qpos[3] = 1.0
-                self.data.qpos[7:19] = self.default_dof_pos.numpy()
+                # Initialize full body to defaults
+                self.data.qpos[7:7+29] = self.default_dof_pos.numpy()
 
-            self.data.qpos[2] = 0.85 # Height
+            self.data.qpos[2] = 0.82
             mujoco.mj_forward(self.model, self.data)
             self.com_ref = self.data.subtree_com[0].copy()
 
             step = 0
-            # Initialize Targets
-            rl_leg_targets = self.default_dof_pos.numpy() 
-            upper_body_targets = np.zeros(17) 
+            
+            # Target Arrays
+            rl_leg_targets = self.default_dof_pos[0:12].numpy()
+            upper_body_targets = self.default_dof_pos[12:29].numpy()
 
             while viewer.is_running():
                 start = time.time()
                 
-                # --- 1. LEGS: UPDATED BY RL (50Hz) ---
+                # --- 1. RL STEP (50Hz) ---
                 if step % DECIMATION == 0:
                     with torch.no_grad():
                         obs = self.get_observations()
+                        
+                        # Policy Output (Size N)
                         actions = self.policy(obs).detach()[0]
                         self.last_actions = actions
-                        rl_leg_targets = (actions.numpy() * 0.5) + self.default_dof_pos.numpy()
+                        
+                        # We ONLY care about the first 12 actions (Legs)
+                        # Even if policy outputs 29, we take [0:12] for legs
+                        leg_actions = actions[0:12]
+                        
+                        rl_leg_targets = (leg_actions.numpy() * 0.5) + self.default_dof_pos[0:12].numpy()
 
-                # --- 2. UPPER BODY: UPDATED BY VR (MOCAP) ---
+                # --- 2. MOCAP UPDATE ---
                 mocap_data = self.receiver.get_latest()
                 if mocap_data:
-                    # Convert Mocap to Robot Joint Angles
                     full_qpos = self.converter.convert_to_qpos(mocap_data, self.data.qpos)
-                    # STRICTLY extract only indices 12-29 (Waist + Arms)
+                    # Extract Upper Body (Indices 12-28)
                     upper_body_targets = full_qpos[7+12 : 7+29]
 
-                # --- 3. PHYSICS CALCULATION ---
-                # A. Leg Torques (RL + Balance Helper)
+                # --- 3. PHYSICS & CONTROL ---
+                
+                # A. LEGS (RL + Balance Assist)
                 qpos_legs = self.data.qpos[7 : 7+12]
                 qvel_legs = self.data.qvel[6 : 6+12]
-                
                 balance_correction = self.compute_balance_torque()
                 
                 leg_torques = LEG_KP * (rl_leg_targets - qpos_legs) - LEG_KD * qvel_legs
-                leg_torques += balance_correction # Add the helper force
+                leg_torques += balance_correction
 
-                # B. Arm Torques (VR Tracking)
+                # B. ARMS (Mocap PD)
                 qpos_arms = self.data.qpos[7+12 : 7+29]
                 qvel_arms = self.data.qvel[6+12 : 6+29]
                 
                 arm_torques = ARM_KP * (upper_body_targets - qpos_arms) - ARM_KD * qvel_arms
 
-                # --- 4. APPLY TO ROBOT ---
+                # C. Apply to Full Robot
                 self.data.ctrl[LEG_INDICES] = np.clip(leg_torques, -100, 100)
                 self.data.ctrl[UPPER_BODY_INDICES] = np.clip(arm_torques, -60, 60)
                 
@@ -184,26 +233,12 @@ class G1Controller:
 
         self.receiver.stop()
 
-
 if __name__ == "__main__":
-    import argparse
-
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--url",
-        type=str,
-        default="wss://improvable-maile-unquerulously.ngrok-free.dev",
-        help="Server URL"
-    )
-    parser.add_argument(
-        "--policy",
-        type=str,
-        default="policies\policy_lstm_1.pt",
-        help="Path to policy file"
-    )
-    parser.add_argument("--xml", type=str, default="xml/scene.xml", help="Path to scene.xml")
+    parser.add_argument("--url", type=str, default="wss://improvable-maile-unquerulously.ngrok-free.dev")
+    parser.add_argument("--policy", type=str, required=True, help="Path to ANY .pt policy file (12 or 29 DoF)")
+    parser.add_argument("--xml", type=str, default="xml/scene.xml")
     args = parser.parse_args()
-    print(args.url)
-    print(args.policy)
+    
     sim = G1Controller(args.xml, args.policy)
     sim.run(args.url)
