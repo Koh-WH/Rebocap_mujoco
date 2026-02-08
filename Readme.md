@@ -6,7 +6,7 @@ This repo only uses 12 rebocap sensors:
 ## Folder Structure:  
 ```
 rebocap_g1_realtime/
-├── config_global.py  
+├── config.py  
 ├── main.py     
 │            
 ├── realtime_mujoco_viewer.py    
@@ -34,8 +34,8 @@ rebocap_g1_realtime/
 ```
 python realtime_mujoco_viewer.py --model_path scene.xml --calibrate
 ```  
-### To make configuration easier, the above script is split into "main.py" and "config_global.py" 
-- Configurations can be made in "config_global.py"  
+### To make configuration easier, the above script is split into "main.py" and "config.py" 
+- Configurations can be made in "config.py"  
 - "main.py" includes unlocked hips and ground clamping for the feet.
 ```
 python main.py --model_path scene.xml --calibrate
@@ -52,10 +52,10 @@ python main_2.py --help
 - Open another terminal and run ```python webreceiver.py --calibrate``` and paste the url.
 - Or run ```python webreceiver.py --calibrate --url <paste url>```
   
-### With RL Policy from [IsaacGym](https://github.com/Koh-WH/g1_isaacgym)
+### With RL Policy from --> [IsaacGym](https://github.com/Koh-WH/g1_isaacgym)
 - With RL policy for legs in physics environment  
 ```
-python RL_legs_webreceiver.py
+python RL_legs_webreceiver.py --policy=policies\12dof_stand_1.pt
 ```
   
 ### Recording and play:

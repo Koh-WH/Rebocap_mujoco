@@ -16,7 +16,7 @@ import sys
 
 # Import configuration
 try:
-    from config_global import (
+    from config import (
         REBOCAP_TO_G1_MAPPING,
         MODEL_PATH,
         REBOCAP_PORT,
@@ -25,8 +25,8 @@ try:
         ROOT_ROTATION_CONFIG
     )
 except ImportError:
-    print("❌ config_global.py not found!")
-    print("Make sure config_global.py is in the same directory")
+    print("❌ config.py not found!")
+    print("Make sure config.py is in the same directory")
     sys.exit(1)
 
 # Import ReboCap SDK

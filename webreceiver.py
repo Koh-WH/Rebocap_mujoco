@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-WEBRECEIVER: Remote G1 Viewer
+WEBRECEIVER: Remote G1 Viewer (Global Rotation Mode)
 - Connects to the Ngrok URL
-- Renders robot with Locked Hips & Ground Clamping
+- Uses "Global Rotation" logic to match main.py
 """
 import argparse
 import asyncio
@@ -19,17 +19,26 @@ import sys
 
 # Import Config
 try:
-    from config import COORDINATE_REMAP, REBOCAP_TO_G1_MAPPING
-except ImportError:
-    print("❌ config.py not found! Copy it from your host PC.")
+    # We now import the NEW config variables
+    from config import (
+        REBOCAP_TO_G1_MAPPING,
+        ROOT_HEIGHT_OFFSET,
+        ROOT_ROTATION_CONFIG
+    )
+except ImportError as e:
+    print(f"❌ Import Error: {e}")
+    print("Make sure 'config.py' is the renamed 'config_global.py' and is in this folder.")
     sys.exit(1)
 
-# --- MATH HELPERS ---
+# ============================================
+# HELPER MATH FUNCTIONS
+# ============================================
 def normalize(v):
-    n = np.linalg.norm(v)
-    return v if n < 1e-8 else v / n
+    norm = np.linalg.norm(v)
+    return v if norm < 1e-8 else v / norm
 
 def quat_mul(q1, q2):
+    """Multiply two quaternions [x, y, z, w]"""
     x1, y1, z1, w1 = q1
     x2, y2, z2, w2 = q2
     return np.array([
@@ -40,9 +49,18 @@ def quat_mul(q1, q2):
     ])
 
 def quat_conj(q):
+    """Conjugate of quaternion [x, y, z, w]"""
     return np.array([-q[0], -q[1], -q[2], q[3]])
 
-# --- WEBSOCKET CLIENT ---
+def compute_relative_quat(child_quat, parent_quat):
+    """Compute relative rotation: child relative to parent"""
+    parent_inv = quat_conj(normalize(np.array(parent_quat)))
+    child_norm = normalize(np.array(child_quat))
+    return quat_mul(parent_inv, child_norm)
+
+# ============================================
+# WEBSOCKET CLIENT
+# ============================================
 class RemoteReceiver:
     def __init__(self):
         self.latest_data = None
@@ -82,46 +100,51 @@ class RemoteReceiver:
     def stop(self):
         self.running = False
 
-# --- CONVERTER (Locked Hips & Clamping) ---
+# ============================================
+# MOTION CONVERTER (NEW GLOBAL LOGIC)
+# ============================================
 class MotionConverter:
     def __init__(self, model):
         self.model = model
-        self.joint_map = {mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i): model.jnt_qposadr[i] for i in range(model.njnt) if mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)}
+        self.joint_map = {}
+        # Store both qpos index and joint ID
+        for i in range(model.njnt):
+            n = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
+            if n: 
+                self.joint_map[n] = {
+                    'qpos_idx': model.jnt_qposadr[i],
+                    'joint_id': i
+                }
+        
         self.neutral_pose = None
         self.is_calibrated = False
 
     def calibrate(self, buffer_data):
         if not buffer_data: return False
+        count = len(buffer_data)
+        print(f"📊 Processing {count} calibration frames...")
+        
         sum_pose = np.zeros((24, 4))
         for frame in buffer_data:
             sum_pose += np.array(frame['pose24'])
-        self.neutral_pose = [normalize(q).tolist() for q in (sum_pose / len(buffer_data))]
+        avg_pose = sum_pose / count
+        self.neutral_pose = [normalize(q).tolist() for q in avg_pose]
         self.is_calibrated = True
+        
+        print(f"✅ Calibration complete!")
         return True
 
     def quat_to_euler(self, q):
         try:
-            x,y,z,w = normalize(np.array(q))
-            rot = R.from_quat([x,y,z,w])
+            x, y, z, w = normalize(np.array(q))
+            rot = R.from_quat([x, y, z, w])
             eu = rot.as_euler('xyz', degrees=False)
-            if COORDINATE_REMAP['use_remapping']:
-                axis_map = COORDINATE_REMAP['axis_map']
-                axis_signs = COORDINATE_REMAP['axis_signs']
-                remapped = [0.0, 0.0, 0.0]
-                for u_ax, m_ax in axis_map.items():
-                    remapped[m_ax] = eu[u_ax] * axis_signs[u_ax]
-                return remapped
-            return eu
-        except: return [0,0,0]
-
-    def compute_relative_rotation(self, current_quat, neutral_quat):
-        try:
-            curr = normalize(np.array(current_quat))
-            neut = normalize(np.array(neutral_quat))
-            return quat_mul(curr, quat_conj(neut)).tolist()
-        except: return [0,0,0,1]
+            return {'x': eu[0], 'y': eu[1], 'z': eu[2]}
+        except: 
+            return {'x': 0.0, 'y': 0.0, 'z': 0.0}
 
     def apply_ground_clamping(self, data, foot_offset=0.045):
+        """Keep robot feet above ground"""
         mujoco.mj_kinematics(self.model, data)
         try:
             l_z = data.body('left_ankle_roll_link').xpos[2]
@@ -135,49 +158,100 @@ class MotionConverter:
         qpos = current_qpos.copy()
         if not mocap_data or "pose24" not in mocap_data: return qpos
         
-        # 1. Root Position (Start at 0 for clamping)
+        pose24 = mocap_data['pose24']
+        
+        # 1. Root Position
         t = mocap_data['tran']
         qpos[0] = t[0]
         qpos[1] = t[1]
-        qpos[2] = t[2] + 0.0 
+        qpos[2] = t[2] + ROOT_HEIGHT_OFFSET
 
-        # 2. Root Rotation -> LOCKED UPRIGHT
-        qpos[3], qpos[4], qpos[5], qpos[6] = 1.0, 0.0, 0.0, 0.0
+        # 2. Root Rotation (Pelvis - index 0)
+        pelvis_quat = pose24[0]
         
-        # 3. Joints (Mapped from Config)
-        pose24 = mocap_data['pose24']
-        for idx, cfg in REBOCAP_TO_G1_MAPPING.items():
-            if idx >= len(pose24): continue
+        if self.is_calibrated:
+            neutral_pelvis = self.neutral_pose[0]
+            rel_quat = compute_relative_quat(pelvis_quat, neutral_pelvis)
+        else:
+            rel_quat = normalize(np.array(pelvis_quat))
+        
+        euler = self.quat_to_euler(rel_quat)
+        
+        root_euler = [
+            euler['x'] if ROOT_ROTATION_CONFIG['use_roll'] else 0.0,
+            euler['z'] if ROOT_ROTATION_CONFIG['use_pitch'] else 0.0,
+            euler['y'] if ROOT_ROTATION_CONFIG['use_yaw'] else 0.0
+        ]
+        
+        from scipy.spatial.transform import Rotation as Rot
+        root_rot = Rot.from_euler('xyz', root_euler, degrees=False)
+        root_quat = root_rot.as_quat()  # [x, y, z, w]
+        
+        qpos[3] = root_quat[3]   # w
+        qpos[4] = root_quat[0]   # x
+        qpos[5] = root_quat[1]   # y
+        qpos[6] = root_quat[2]   # z
+        
+        # 3. Process Joint Mappings
+        for mapping in REBOCAP_TO_G1_MAPPING:
+            joint_name = mapping['joint']
+            child_idx = mapping['sensor']
+            parent_idx = mapping.get('parent_sensor', None)
+            axis = mapping['axis']
+            scale = mapping.get('scale', 1.0)
+            offset = mapping.get('offset', 0.0)
             
-            q_curr = pose24[idx]
-            if self.is_calibrated:
-                q_curr = self.compute_relative_rotation(q_curr, self.neutral_pose[idx])
+            if child_idx >= len(pose24): continue
+            if joint_name not in self.joint_map: continue
             
-            eu = self.quat_to_euler(q_curr)
+            # Get sensor quaternions
+            child_quat_global = pose24[child_idx]
             
-            for item in cfg:
-                if len(item) >= 4:
-                    name, axis, scale, offset = item[0], item[1], item[2], item[3]
-                    if name in self.joint_map:
-                        val = eu[axis] * scale + offset
-                        qpos[self.joint_map[name]] = val
-                    
+            # Compute relative rotation
+            if parent_idx is not None and parent_idx < len(pose24):
+                parent_quat_global = pose24[parent_idx]
+                quat_relative = compute_relative_quat(child_quat_global, parent_quat_global)
+            else:
+                quat_relative = child_quat_global
+            
+            # Apply calibration
+            if self.is_calibrated and child_idx < len(self.neutral_pose):
+                neutral_quat = self.neutral_pose[child_idx]
+                quat_relative = compute_relative_quat(quat_relative, neutral_quat)
+            
+            # Convert to Euler and extract axis
+            euler = self.quat_to_euler(quat_relative)
+            val = euler[axis] * scale + offset
+            
+            # Apply Limits
+            info = self.joint_map[joint_name]
+            q_idx = info['qpos_idx']
+            j_id = info['joint_id']
+            
+            if self.model.jnt_limited[j_id]:
+                min_limit, max_limit = self.model.jnt_range[j_id]
+                val = np.clip(val, min_limit, max_limit)
+            
+            qpos[q_idx] = val
+        
         return qpos
 
-# --- MAIN ---
+# ============================================
+# MAIN
+# ============================================
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--url", type=str, help="Ngrok URL")
+    parser.add_argument("--url", type=str, default="wss://improvable-maile-unquerulously.ngrok-free.dev", help="Ngrok URL")
     parser.add_argument("--model_path", default="xml/scene.xml")
     parser.add_argument("--calibrate", action="store_true")
     args = parser.parse_args()
 
     if not args.url:
         print("\n" + "="*60)
-        args.url = input("🔗 Enter Ngrok URL (from webserver_ngrok.py): ").strip()
+        args.url = input("🔗 Enter Ngrok URL (from webserver.py): ").strip()
         print("="*60 + "\n")
         
-    # Auto-fix protocol for Ngrok
+    # Auto-fix protocol
     if "http" in args.url: args.url = args.url.replace("http", "ws")
     if not args.url.startswith("ws"): args.url = "wss://" + args.url
 
@@ -185,6 +259,8 @@ def main():
         print(f"❌ File not found: {args.model_path}")
         return
 
+    # Load Model
+    print(f"\n📂 Loading model: {args.model_path}")
     model = mujoco.MjModel.from_xml_path(args.model_path)
     data = mujoco.MjData(model)
     conv = MotionConverter(model)
@@ -194,22 +270,29 @@ def main():
 
     print("⏳ Waiting for stream...")
     while not rx.get_latest(): time.sleep(0.1)
-    print("✅ Connected!")
+    print("✅ Receiving data!")
 
+    # Calibration Step
     if args.calibrate:
-        print("\n📏 CALIBRATION: Press ENTER in T-POSE...")
+        print("\n" + "="*40)
+        print("🎯 CALIBRATION MODE")
+        print("1. Stand in T-pose")
+        print("2. Press ENTER to start...")
         input()
-        print("📸 Capturing 5s...")
+        print("⏳ Capturing 3 seconds...")
+        
         buf = []
-        end = time.time()+5
-        while time.time()<end:
+        end = time.time() + 3
+        while time.time() < end:
             d = rx.get_latest()
             if d: buf.append(d)
             time.sleep(0.05)
+        
         conv.calibrate(buf)
-        print("✅ Calibrated!")
+        print("✅ Calibrated! Starting viewer...")
 
-    print("\n🎬 STARTING VIEWER (Press 'S' for shadows)")
+    # Viewer Loop
+    print("\n🎬 STARTING REAL-TIME VIEWER")
     with mujoco.viewer.launch_passive(model, data) as viewer:
         viewer.cam.azimuth = 90
         viewer.cam.elevation = -15

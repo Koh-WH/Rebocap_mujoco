@@ -47,7 +47,7 @@ class ReboCapNgrokServer:
         # Initialize ReboCap
         self.sdk = rebocap_ws_sdk.RebocapWsSdk(
             coordinate_type=rebocap_ws_sdk.CoordinateType.UnityCoordinate,
-            use_global_rotation=False
+            use_global_rotation=True
         )
         self.sdk.set_pose_msg_callback(self._on_pose)
 
