@@ -8,7 +8,10 @@ This repo only uses 12 rebocap sensors:
 rebocap_g1_realtime/
 ├── config.py  
 ├── main.py     
-│            
+│   
+├── config_local_joints.py      # use_global_rotation=False
+├── main_local_joints.py  
+│      
 ├── realtime_mujoco_viewer.py    
 │
 ├── webreceiver.py
